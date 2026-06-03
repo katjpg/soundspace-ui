@@ -21,6 +21,7 @@ from soundspace.audio.feature import (
     load_audio,
 )
 from soundspace.config.dataset import DatasetConfig
+from soundspace.dataset.tracks import read_tracks, resolve_audio_paths
 
 log = logging.getLogger(__name__)
 
@@ -76,8 +77,8 @@ def extract(
     groups = _check_feature_groups(feature_groups)
     workers = _resolve_workers(num_workers)
 
-    table = pd.read_csv(cfg.processed_dir / f"{cfg.active}.csv", dtype={"song_id": str})
-    audio_paths = _resolve_paths(table, cfg.audio_dir)
+    table = read_tracks(cfg)
+    audio_paths = resolve_audio_paths(table, cfg.audio_dir)
     audio_paths = _select_paths(audio_paths, song_ids)
 
     order = {song_id: index for index, song_id in enumerate(audio_paths)}
@@ -102,25 +103,6 @@ def extract(
     features.sort(key=lambda track: order[track.song_id])
 
     return FeatureSet(tracks=features, groups=groups, failures=failures)
-
-
-def _resolve_paths(table: pd.DataFrame, audio_dir: Path) -> dict[str, Path]:
-    _check_columns(table, {"song_id"})
-
-    has_audio_path = "audio_path" in table.columns
-    has_quadrant = "quadrant" in table.columns
-
-    paths: dict[str, Path] = {}
-    for row in table.to_dict("records"):
-        song_id = str(row["song_id"])
-        if has_audio_path and isinstance(row["audio_path"], str):
-            path = Path(row["audio_path"])
-            paths[song_id] = path if path.is_absolute() else audio_dir / path
-        elif has_quadrant:
-            paths[song_id] = audio_dir / str(row["quadrant"]) / f"{song_id}.mp3"
-        else:
-            paths[song_id] = audio_dir / f"{song_id}.mp3"
-    return paths
 
 
 def _select_paths(
@@ -175,12 +157,6 @@ def _resolve_workers(num_workers: int | None) -> int:
     if num_workers <= 0:
         raise ValueError(f"num_workers must be > 0, got {num_workers}")
     return num_workers
-
-
-def _check_columns(table: pd.DataFrame, columns: set[str]) -> None:
-    missing = columns - set(table.columns)
-    if missing:
-        raise ValueError(f"track table missing columns: {sorted(missing)}")
 
 
 def _init_worker() -> None:
