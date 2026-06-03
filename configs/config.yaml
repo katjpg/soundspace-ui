@@ -27,16 +27,25 @@ datasets:
       test_file: tvt_dataframes/tvt_70_15_15/tvt_70_15_15_test_audio_balanced.csv
 
 embeddings:
-  clap:
-    provider: huggingface
-    model_id: laion/larger_clap_music
-    device: null
-    dtype: float32
-  muq:
-    provider: huggingface
-    model_id: OpenMuQ/MuQ-MuLan-large
-    device: null
-    dtype: float32
+  active: muq_mulan
+  models:
+    muq_mulan:
+      provider: huggingface
+      model_id: OpenMuQ/MuQ-MuLan-large
+      device: null
+      dtype: float32
+      batch_size: 8
+      center: true
+      normalize: true
+      max_duration: 30.0
+    clap:
+      provider: huggingface
+      model_id: laion/larger_clap_music
+      device: null
+      dtype: float32
+      batch_size: 8
+      center: true
+      normalize: true
 
 pipeline:
   knn:
