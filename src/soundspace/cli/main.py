@@ -2,7 +2,7 @@ import logging
 
 import typer
 
-from soundspace.cli import dataset
+from soundspace.cli import dataset, pipeline
 
 app = typer.Typer(
     help="Soundspace CLI: command-line interface for dataset and pipeline workflows.",
@@ -10,11 +10,17 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 app.add_typer(dataset.app, name="dataset")
+app.add_typer(pipeline.app, name="pipeline")
 
 
 @app.callback()
 def configure_logging(
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Show debug logs."),
+    verbose: bool = typer.Option(
+        False,
+        "-v",
+        "--verbose",
+        help="Show debug logs.",
+    ),
 ) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
