@@ -1,0 +1,32 @@
+[project]
+name = "soundspace-ui"
+version = "0.1.0"
+description = "Soundspace UI | An Interactive Semantic Space of Musical Affect."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.136.3",
+    "httpx>=0.28.1",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "pyyaml>=6.0.3",
+    "tqdm>=4.67.3",
+    "typer>=0.26.6",
+]
+
+[project.scripts]
+soundspace = "soundspace.cli.main:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.15",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/soundspace"]
