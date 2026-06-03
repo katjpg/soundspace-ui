@@ -1,0 +1,51 @@
+data:
+  root: data
+  name: merge-balanced
+  raw: raw
+  processed: processed
+  artifacts: artifacts
+
+datasets:
+  merge-balanced:
+    source:
+      provider: zenodo
+      record_id: 13939205
+      filename: MERGE_Audio_Balanced.zip
+      md5: bbca042c520fd16bca74b572ac6c88e3
+      base_url: https://zenodo.org
+      extract: true
+    audio:
+      dir: "."
+      pattern: "^Q[1-4]/[^/]+\\.mp3$"
+    metadata:
+      file: merge_audio_balanced_metadata.csv
+      av_values: merge_audio_balanced_av_values.csv
+    split:
+      name: tvt_70_15_15
+      train_file: tvt_dataframes/tvt_70_15_15/tvt_70_15_15_train_audio_balanced.csv
+      val_file: tvt_dataframes/tvt_70_15_15/tvt_70_15_15_validate_audio_balanced.csv
+      test_file: tvt_dataframes/tvt_70_15_15/tvt_70_15_15_test_audio_balanced.csv
+
+embeddings:
+  clap:
+    provider: huggingface
+    model_id: laion/larger_clap_music
+    device: null
+    dtype: float32
+  muq:
+    provider: huggingface
+    model_id: OpenMuQ/MuQ-MuLan-large
+    device: null
+    dtype: float32
+
+pipeline:
+  knn:
+    k: 10
+  leiden:
+    resolution: 1.0
+    seed: 42
+  umap:
+    n_neighbors: 100
+    min_dist: 0.10
+    metric: cosine
+    seed: 42
