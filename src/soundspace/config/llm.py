@@ -16,7 +16,7 @@ class GeminiSettings(BaseSettings):
     api_key: SecretStr | None = None
     model: str = _GEMINI_MODEL
     max_output_tokens: int = 8192
-    temperature: float = 0.2
+    temperature: float = 0.1
     top_p: float = 0.95
     top_k: int = 40
     thinking_level: str = "minimal"

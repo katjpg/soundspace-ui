@@ -30,6 +30,7 @@ _EMBEDDINGS_SUBDIR = "embeddings"
 _PREVIEW_TIMEOUT = 15.0
 _PLAYLIST_SEED_MAX = 20
 _PLAYLIST_PER_SEED_K = 3
+_PLAYLIST_FIT_FLOOR = 0.45
 _SPOTIFY_TRACK_RE = re.compile(
     r"(?:open\.spotify\.com/track/|spotify:track:)([A-Za-z0-9]+)"
 )
@@ -249,8 +250,14 @@ class RecommendService:
         intent = query or _describe_seeds(tracks)
         seed_summaries = [{"artist": s.artist, "title": s.title} for s in resolved]
         ranked = await self._agent.rank_playlist(intent, candidates, seed_summaries)
+        kept = [song for song in ranked if song.fit >= _PLAYLIST_FIT_FLOOR]
+        dropped = len(ranked) - len(kept)
+        if dropped:
+            self._progress(
+                f"Dropped {dropped} candidates below fit floor ({_PLAYLIST_FIT_FLOOR})"
+            )
         return RecommendResult(
-            recommendations=self._to_recommendations(ranked, n=n),
+            recommendations=self._to_recommendations(kept, n=n),
             resolved_seeds=resolved,
             unresolved_seeds=unresolved,
             candidate_count=len(candidates),
