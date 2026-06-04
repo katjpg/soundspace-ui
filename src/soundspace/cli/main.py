@@ -2,9 +2,10 @@ import logging
 
 import typer
 
-from soundspace.cli import dataset, pipeline
+from soundspace.cli import dataset, pipeline, search
 from soundspace.cli import eval as eval_commands
 from soundspace.cli.logging import configure_runtime
+
 
 configure_runtime()
 
@@ -16,6 +17,7 @@ app = typer.Typer(
 app.add_typer(dataset.app, name="dataset")
 app.add_typer(pipeline.app, name="pipeline")
 app.add_typer(eval_commands.app, name="eval")
+app.add_typer(search.app, name="search")
 
 
 @app.callback()
