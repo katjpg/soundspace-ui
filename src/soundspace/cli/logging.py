@@ -10,6 +10,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 def configure_runtime(level: int = logging.INFO) -> None:
+    _export_hf_token()
     logging.basicConfig(level=level, format="%(message)s")
     logging.captureWarnings(True)
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -28,3 +29,13 @@ def configure_runtime(level: int = logging.INFO) -> None:
     from transformers.utils import logging as hf_logging
 
     hf_logging.set_verbosity_error()
+
+
+def _export_hf_token() -> None:
+    if os.environ.get("HF_TOKEN"):
+        return
+    from soundspace.config.llm import HuggingFaceSettings
+
+    token = HuggingFaceSettings().token
+    if token is not None:
+        os.environ["HF_TOKEN"] = token.get_secret_value()
