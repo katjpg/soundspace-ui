@@ -124,6 +124,10 @@ class DatasetConfig(BaseModel):
         return self.data.root / self.data.processed
 
     @property
+    def artifacts_dir(self) -> Path:
+        return self.data.root / self.data.artifacts
+
+    @property
     def dataset_dir(self) -> Path:
         return self.raw_dir / self.active
 

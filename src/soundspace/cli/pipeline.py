@@ -12,10 +12,12 @@ from soundspace.audio.extract import FeatureSet, extract as extract_features
 from soundspace.audio.feature import ALL_FEATURE_GROUPS, FeatureGroup
 from soundspace.config.dataset import DatasetConfig, load_dataset_config
 from soundspace.config.pipeline import (
+    ClusterConfig,
     EmbeddingConfig,
     PipelineConfig,
     load_pipeline_config,
 )
+from soundspace.space.pipeline.cluster import ClusterResult, cluster_dataset
 from soundspace.config.settings import get_settings
 from soundspace.space.embed.base import Embedder, load_embedder
 from soundspace.space.pipeline.embed import EmbedResult, embed_dataset
@@ -332,4 +334,132 @@ def _print_embed_profile(result: EmbedResult) -> None:
     )
     table.add_row("mean-vector norm", f"{float(np.linalg.norm(mean)):.4f}")
     table.add_row(f"row[{idx}][:{_PROFILE_PREVIEW_DIMS}]", preview)
+    console.print(table)
+
+
+_CLUSTER_PREVIEW_ROWS = 12
+
+_CLUSTER_HELP = """\
+Cluster the embedding space into communities.
+
+Reads data/processed/embeddings/<model>.npz, builds a cosine kNN graph, detects
+communities with Leiden, projects to 2D with UMAP, and labels each community
+from the dataset tags. Hyperparameters come from the pipeline: section of
+config; the flags below override them per run.
+
+Examples:
+
+  soundspace pipeline cluster
+
+  soundspace pipeline cluster -m clap -k 15
+
+  soundspace pipeline cluster -r 1.5 -n 50
+
+Outputs:
+
+  data/artifacts/<model>_clusters.csv
+  data/artifacts/<model>_graph.npz
+"""
+
+
+def _resolve_cluster_config(
+    knn_k: int | None,
+    resolution: float | None,
+    neighbors: int | None,
+) -> ClusterConfig:
+    cluster = _pipeline_config().cluster
+    knn = (
+        cluster.knn.model_copy(update={"k": knn_k})
+        if knn_k is not None
+        else cluster.knn
+    )
+    leiden = (
+        cluster.leiden.model_copy(update={"resolution": resolution})
+        if resolution is not None
+        else cluster.leiden
+    )
+    umap = (
+        cluster.umap.model_copy(update={"n_neighbors": neighbors})
+        if neighbors is not None
+        else cluster.umap
+    )
+    return cluster.model_copy(update={"knn": knn, "leiden": leiden, "umap": umap})
+
+
+@app.command(help=_CLUSTER_HELP)
+def cluster(
+    model: str | None = typer.Option(
+        None,
+        "-m",
+        "--model",
+        metavar="NAME",
+        help="Embedding model to cluster. Defaults to the active model in config.",
+    ),
+    knn_k: int | None = typer.Option(
+        None,
+        "-k",
+        "--knn-k",
+        min=1,
+        metavar="K",
+        help="Neighbors per node in the kNN graph. Defaults to config.",
+    ),
+    resolution: float | None = typer.Option(
+        None,
+        "-r",
+        "--resolution",
+        metavar="R",
+        help="Leiden resolution; higher yields more communities. Defaults to config.",
+    ),
+    neighbors: int | None = typer.Option(
+        None,
+        "-n",
+        "--neighbors",
+        min=2,
+        metavar="N",
+        help="UMAP n_neighbors. Defaults to config.",
+    ),
+) -> None:
+    dataset = _config()
+    pipe = _pipeline_config()
+    name = model or pipe.active
+    if name not in pipe.embeddings:
+        known = ", ".join(sorted(pipe.embeddings))
+        raise typer.BadParameter(f"unknown model {name!r}; choices: {known}")
+    config = _resolve_cluster_config(knn_k, resolution, neighbors)
+
+    with console.status(f"Clustering {name}..."):
+        result = cluster_dataset(dataset, config, model=name)
+
+    typer.echo(f"Clusters: {result.csv_path}")
+    typer.echo(f"Graph: {result.graph_path}")
+    _print_cluster_summary(result)
+    _print_cluster_profile(result)
+
+
+def _print_cluster_summary(result: ClusterResult) -> None:
+    table = Table(title=f"{result.model}: {result.n_communities} communities")
+    table.add_column("Field", style="cyan", no_wrap=True)
+    table.add_column("Value")
+    table.add_row("model", result.model)
+    table.add_row("tracks", str(result.n_tracks))
+    table.add_row("communities", str(result.n_communities))
+    table.add_row("modularity", f"{result.modularity:.4f}")
+    table.add_row("edges", str(result.n_edges))
+    console.print(table)
+
+
+def _print_cluster_profile(result: ClusterResult) -> None:
+    frame = pd.read_csv(result.csv_path, dtype={"song_id": str})
+    grouped = (
+        frame.groupby("community")
+        .agg(size=("song_id", "size"), label=("label", "first"))
+        .sort_values("size", ascending=False)
+    )
+    shown = min(_CLUSTER_PREVIEW_ROWS, len(grouped))
+    table = Table(title=f"Top {shown} communities by size")
+    table.add_column("Community", justify="right", style="cyan")
+    table.add_column("Size", justify="right")
+    table.add_column("Label")
+    for community, row in grouped.head(_CLUSTER_PREVIEW_ROWS).iterrows():
+        table.add_row(str(int(community)), str(int(row["size"])), str(row["label"]))
     console.print(table)

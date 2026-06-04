@@ -9,6 +9,7 @@ _DEFAULT_MAX_DURATION = 30.0
 
 DTypeName = Literal["float32", "float16", "bfloat16"]
 EmbeddingProvider = Literal["huggingface"]
+SymmetrizeMode = Literal["max", "min", "mean"]
 
 
 class EmbeddingConfig(BaseModel):
@@ -25,11 +26,54 @@ class EmbeddingConfig(BaseModel):
     max_duration: float = Field(default=_DEFAULT_MAX_DURATION, gt=0.0)
 
 
+class KNNConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    k: int = Field(default=10, gt=0)
+    symmetrize: bool = True
+    symmetrize_mode: SymmetrizeMode = "max"
+
+
+class LeidenConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolution: float = Field(default=1.0, gt=0.0)
+    seed: int | None = 42
+    n_iterations: int = -1
+    use_weights: bool = True
+
+
+class UMAPConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    n_neighbors: int = Field(default=15, gt=1)
+    min_dist: float = Field(default=0.1, ge=0.0, le=1.0)
+    metric: Literal["cosine"] = "cosine"
+    seed: int | None = 42
+
+
+class LabelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    columns: tuple[str, ...] = ("mood_all",)
+    top_n: int = Field(default=3, gt=0)
+
+
+class ClusterConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    knn: KNNConfig = Field(default_factory=KNNConfig)
+    leiden: LeidenConfig = Field(default_factory=LeidenConfig)
+    umap: UMAPConfig = Field(default_factory=UMAPConfig)
+    label: LabelConfig = Field(default_factory=LabelConfig)
+
+
 class PipelineConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     active: str
     embeddings: dict[str, EmbeddingConfig] = Field(min_length=1)
+    cluster: ClusterConfig = Field(default_factory=ClusterConfig)
 
     @model_validator(mode="after")
     def _check_active(self) -> PipelineConfig:
@@ -59,4 +103,7 @@ def load_pipeline_config(raw: dict[str, Any]) -> PipelineConfig:
         raise ValueError("config 'embeddings' must define a non-empty 'models' map")
 
     named = {name: {**spec, "name": name} for name, spec in models.items()}
-    return PipelineConfig.model_validate({"active": active, "embeddings": named})
+    pipeline = raw.get("pipeline") or {}
+    return PipelineConfig.model_validate(
+        {"active": active, "embeddings": named, "cluster": pipeline}
+    )
