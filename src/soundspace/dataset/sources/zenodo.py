@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 120.0
 _DEFAULT_CHUNK_SIZE = 1024 * 1024
-_DEFAULT_MAX_RETRIES = 4
+_DEFAULT_MAX_ATTEMPTS = 4
 _DEFAULT_BACKOFF = 1.5
 _DEFAULT_BACKOFF_CAP = 30.0
 _USER_AGENT = "soundspace/0.1 (ZenodoClient)"
@@ -45,11 +45,23 @@ class ZenodoConfig:
     token: str | None = None
     timeout: float = _DEFAULT_TIMEOUT
     chunk_size: int = _DEFAULT_CHUNK_SIZE
-    max_retries: int = _DEFAULT_MAX_RETRIES
+    max_attempts: int = _DEFAULT_MAX_ATTEMPTS
     backoff: float = _DEFAULT_BACKOFF
     backoff_cap: float = _DEFAULT_BACKOFF_CAP
     user_agent: str = _USER_AGENT
     show_progress: bool = True
+
+    def __post_init__(self) -> None:
+        if self.timeout <= 0:
+            raise ValueError(f"timeout must be > 0, got {self.timeout}")
+        if self.chunk_size <= 0:
+            raise ValueError(f"chunk_size must be > 0, got {self.chunk_size}")
+        if self.max_attempts <= 0:
+            raise ValueError(f"max_attempts must be > 0, got {self.max_attempts}")
+        if self.backoff < 0:
+            raise ValueError(f"backoff must be >= 0, got {self.backoff}")
+        if self.backoff_cap < 0:
+            raise ValueError(f"backoff_cap must be >= 0, got {self.backoff_cap}")
 
     @property
     def api_base(self) -> str:
@@ -87,6 +99,8 @@ class ZenodoRecord:
 
 
 class ZenodoClient:
+    """Read Zenodo records and download files."""
+
     def __init__(self, config: ZenodoConfig | None = None) -> None:
         self.config = config or ZenodoConfig()
         self._client: httpx.Client | None = None
@@ -215,12 +229,12 @@ class ZenodoClient:
 
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         last: Exception | None = None
-        for attempt in range(1, self.config.max_retries + 1):
+        for attempt in range(1, self.config.max_attempts + 1):
             try:
                 response = self._c.request(method, url, **kwargs)
             except httpx.TransportError as exc:
                 last = exc
-                if attempt >= self.config.max_retries:
+                if attempt >= self.config.max_attempts:
                     break
                 log.warning(
                     "zenodo %s %s failed: %s; retry %d",
@@ -234,7 +248,7 @@ class ZenodoClient:
             if response.is_error:
                 if (
                     response.status_code in _RETRYABLE_STATUS
-                    and attempt < self.config.max_retries
+                    and attempt < self.config.max_attempts
                 ):
                     log.warning(
                         "zenodo %s %s returned %d; retry %d",
@@ -251,12 +265,12 @@ class ZenodoClient:
                 )
             return response
         raise ZenodoHTTPError(
-            f"request to {url} failed after {self.config.max_retries} attempts"
+            f"request to {url} failed after {self.config.max_attempts} attempts"
         ) from last
 
     def _stream_to_file(self, url: str, tmp: Path, *, label: str) -> str:
         last: Exception | None = None
-        for attempt in range(1, self.config.max_retries + 1):
+        for attempt in range(1, self.config.max_attempts + 1):
             tmp.unlink(missing_ok=True)
             try:
                 with self._c.stream("GET", url) as response:
@@ -264,7 +278,7 @@ class ZenodoClient:
                         response.read()
                         if (
                             response.status_code in _RETRYABLE_STATUS
-                            and attempt < self.config.max_retries
+                            and attempt < self.config.max_attempts
                         ):
                             log.warning(
                                 "zenodo download %s returned %d; retry %d",
@@ -282,7 +296,7 @@ class ZenodoClient:
                     return self._write_response(response, tmp, label=label, total=total)
             except httpx.TransportError as exc:
                 last = exc
-                if attempt >= self.config.max_retries:
+                if attempt >= self.config.max_attempts:
                     break
                 log.warning(
                     "zenodo download %s interrupted: %s; retry %d",
@@ -293,7 +307,7 @@ class ZenodoClient:
                 self._sleep_backoff(attempt)
         tmp.unlink(missing_ok=True)
         raise ZenodoHTTPError(
-            f"download of {url} failed after {self.config.max_retries} attempts"
+            f"download of {url} failed after {self.config.max_attempts} attempts"
         ) from last
 
     def _write_response(
